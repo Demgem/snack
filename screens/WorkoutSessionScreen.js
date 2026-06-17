@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
+import { usePoseDetection } from 'react-native-mediapipe';
+import PoseOverlay from '../components/PoseOverlay';
+import { getDetector, createInitialState } from '../utils/exerciseDetectors';
+import { getExerciseConfig } from '../utils/exerciseConfig';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -17,7 +22,67 @@ export default function WorkoutSessionScreen({ navigation, route }) {
   const [isActive, setIsActive] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [setsData, setSetsData] = useState([]);
+  const [feedback, setFeedback] = useState('Get ready');
+  const [landmarks, setLandmarks] = useState(null);
+  const [exerciseState, setExerciseState] = useState(createInitialState());
+  const [cameraPermission, setCameraPermission] = useState(null);
   const timerRef = useRef(null);
+  const exerciseStateRef = useRef(exerciseState);
+
+  // Camera setup
+  const device = useCameraDevice('front');
+
+  // Get exercise config for active landmarks info
+  const exerciseConfig = getExerciseConfig(exercise.id);
+  const detector = getDetector(exercise.id);
+
+  // Keep ref in sync with state for use in frame processor callback
+  useEffect(() => {
+    exerciseStateRef.current = exerciseState;
+  }, [exerciseState]);
+
+  // Request camera permission on mount
+  useEffect(() => {
+    (async () => {
+      const status = await Camera.requestCameraPermission();
+      setCameraPermission(status === 'granted');
+    })();
+  }, []);
+
+  // Pose detection hook
+  const { processFrame } = usePoseDetection({
+    onPoseDetected: useCallback(function (pose) {
+      if (!pose || !pose.landmarks || pose.landmarks.length === 0) {
+        return;
+      }
+      setLandmarks(pose.landmarks);
+    }, []),
+  });
+
+  // Frame processor for camera frames
+  const frameProcessor = useFrameProcessor(function (frame) {
+    'worklet';
+    processFrame(frame);
+  }, [processFrame]);
+
+  // Process landmarks for rep detection
+  useEffect(() => {
+    if (!landmarks || !isActive || !detector) {
+      return;
+    }
+
+    const result = detector(landmarks, exerciseStateRef.current);
+
+    if (result.feedback) {
+      setFeedback(result.feedback);
+    }
+
+    setExerciseState(result.newState);
+
+    if (result.repCompleted) {
+      setReps(function (prev) { return prev + 1; });
+    }
+  }, [landmarks, isActive, detector]);
 
   useEffect(() => {
     return () => {
@@ -37,6 +102,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
 
   const handleStart = () => {
     setIsActive(true);
+    setExerciseState(createInitialState());
     timerRef.current = setInterval(() => {
       setElapsedTime((prev) => prev + 1);
     }, 1000);
@@ -62,6 +128,8 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     setSets(sets + 1);
     setReps(0);
     setElapsedTime(0);
+    setExerciseState(createInitialState());
+    setFeedback('Ready for next set');
   };
 
   const handleFinishWorkout = () => {
@@ -78,22 +146,65 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     });
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Camera Preview Placeholder */}
-      <View style={styles.cameraContainer}>
+  const renderCamera = () => {
+    if (cameraPermission === false) {
+      return (
+        <View style={styles.cameraPlaceholder}>
+          <Ionicons name="camera-outline" size={64} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.cameraPlaceholderText}>
+            Camera permission denied
+          </Text>
+          <Text style={styles.cameraSubText}>
+            Enable camera access in settings
+          </Text>
+        </View>
+      );
+    }
+
+    if (!device) {
+      return (
         <View style={styles.cameraPlaceholder}>
           <Ionicons name="camera" size={64} color="rgba(255,255,255,0.5)" />
           <Text style={styles.cameraPlaceholderText}>
-            Camera Preview
-          </Text>
-          <Text style={styles.cameraSubText}>
-            Pose detection will overlay here
+            Loading Camera...
           </Text>
         </View>
+      );
+    }
 
-        {/* Skeleton Overlay Canvas Area */}
-        <View style={styles.skeletonOverlay} pointerEvents="none" />
+    return (
+      <Camera
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+        frameProcessor={frameProcessor}
+        pixelFormat="yuv"
+      />
+    );
+  };
+
+  const isCorrectForm = feedback && (
+    feedback.indexOf('complete') !== -1 ||
+    feedback.indexOf('Good') !== -1 ||
+    feedback.indexOf('Ready') !== -1
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Camera Preview */}
+      <View style={styles.cameraContainer}>
+        {renderCamera()}
+
+        {/* Pose Skeleton Overlay */}
+        {landmarks && (
+          <PoseOverlay
+            landmarks={landmarks}
+            width={SCREEN_WIDTH}
+            height={SCREEN_HEIGHT}
+            activeLandmarks={exerciseConfig ? exerciseConfig.landmarksUsed : []}
+            isCorrectForm={isCorrectForm}
+          />
+        )}
 
         {/* Exercise Info Overlay - Top */}
         <View style={styles.topOverlay}>
@@ -104,12 +215,23 @@ export default function WorkoutSessionScreen({ navigation, route }) {
               <Text style={styles.timerText}>{formatTime(elapsedTime)}</Text>
             </View>
           </View>
+          {/* Real-time feedback */}
+          <View style={styles.feedbackContainer}>
+            <Text style={[
+              styles.feedbackText,
+              isCorrectForm && styles.feedbackTextGood,
+            ]}>
+              {feedback}
+            </Text>
+          </View>
         </View>
 
         {/* Rep Counter Overlay - Center */}
         <View style={styles.centerOverlay}>
           <View style={styles.repCounterContainer}>
-            <Text style={styles.repLabel}>REPS</Text>
+            <Text style={styles.repLabel}>
+              {exerciseConfig && exerciseConfig.type === 'hold' ? 'SECONDS' : 'REPS'}
+            </Text>
             <Text style={styles.repCount}>{reps}</Text>
             <Text style={styles.setLabel}>Set {sets}</Text>
           </View>
@@ -141,7 +263,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
               onPress={handleFinishSet}
             >
               <Ionicons name="checkmark-circle" size={28} color="#fff" />
-              <Text style={styles.buttonText}>Finish Set</Text>
+              <Text style={styles.buttonText}>Next Set</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -149,7 +271,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
               onPress={handleFinishWorkout}
             >
               <Ionicons name="stop-circle" size={28} color="#fff" />
-              <Text style={styles.buttonText}>End</Text>
+              <Text style={styles.buttonText}>Finish</Text>
             </TouchableOpacity>
           </View>
 
@@ -196,13 +318,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
-  skeletonOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   topOverlay: {
     position: 'absolute',
     top: 0,
@@ -238,6 +353,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  feedbackContainer: {
+    marginTop: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'center',
+  },
+  feedbackText: {
+    color: '#FF9800',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  feedbackTextGood: {
+    color: '#4CAF50',
   },
   centerOverlay: {
     position: 'absolute',
