@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Implement the core pose detection engine using react-native-vision-camera with react-native-mediapipe for on-device pose landmark detection, and build the rep counting logic for all 8 exercises based on joint angle calculations.",
-  "status": "pending",
+  "status": "completed",
   "steps": [
     "Add to package.json dependencies: 'react-native-vision-camera': '^3.6.4', 'react-native-mediapipe': '^0.3.0', 'react-native-worklets-core': '^0.4.0'. These are the community packages for on-device MediaPipe pose detection in React Native.",
     "Create utils/poseDetection.js - Central module that exports: (1) POSE_LANDMARKS constant mapping landmark indices to body part names (nose=0, left_shoulder=11, right_shoulder=12, left_elbow=13, right_elbow=14, left_wrist=15, right_wrist=16, left_hip=23, right_hip=24, left_knee=25, right_knee=26, left_ankle=27, right_ankle=28), (2) calculateAngle(pointA, pointB, pointC) function that computes the angle at pointB given three {x, y} landmark points using Math.atan2, (3) calculateDistance(pointA, pointB) helper function.",
@@ -25,5 +25,5 @@
     "Run 'export NODE_OPTIONS=\"\" && node -e \"const {calculateAngle} = require('./utils/poseDetection'); const a = calculateAngle({x:0,y:0},{x:1,y:0},{x:1,y:1}); console.log(a); if(Math.abs(a-90)<1) console.log('PASS'); else console.log('FAIL');\"' from /projects/sandbox/snack to verify angle calculation works"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All files pass node --check syntax validation. The calculateAngle function correctly returns 90 degrees for a right angle. State machine rep detection works correctly - tested squat cycle (standing->down->up) and confirmed rep only counts on phase transition from down to up. NPM registry still blocked so no install was done, but all imports reference packages declared in package.json. NODE_OPTIONS must be cleared before running node --check."
 }
