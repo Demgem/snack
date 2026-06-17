@@ -1,0 +1,7 @@
+{
+  "task_id": "task-mediapipe-pose-detection",
+  "task_description": "Add AI-powered on-device pose detection using MediaPipe via react-native-vision-camera and react-native-mediapipe. Support 8 exercises with real-time rep counting, skeleton overlay visualization, and save workout results to Supabase. No video streaming - only final rep counts and set data are persisted.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}

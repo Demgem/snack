@@ -21,7 +21,7 @@ const workouts = [
   { id: '3', name: 'Yoga Session', duration: '25 min', calories: '150', icon: 'body-outline' },
 ];
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
   return (
     <ScrollView style={styles.container}>
       {/* Greeting Section */}
@@ -29,6 +29,28 @@ export default function HomeScreen() {
         <Text style={styles.greetingText}>Good Morning!</Text>
         <Text style={styles.subGreeting}>Let's crush your fitness goals today</Text>
       </View>
+
+      {/* AI-Powered Workouts Button */}
+      <TouchableOpacity
+        style={styles.aiWorkoutsCard}
+        onPress={() => navigation.navigate('ExerciseList')}
+      >
+        <View style={styles.aiWorkoutsIcon}>
+          <Ionicons name="camera" size={28} color="#fff" />
+        </View>
+        <View style={styles.aiWorkoutsInfo}>
+          <View style={styles.aiWorkoutsHeader}>
+            <Text style={styles.aiWorkoutsTitle}>AI-Powered Workouts</Text>
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+          </View>
+          <Text style={styles.aiWorkoutsDescription}>
+            Real-time pose tracking to count your reps automatically
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={24} color="#4CAF50" />
+      </TouchableOpacity>
 
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
@@ -238,5 +260,59 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 11,
     color: '#666',
+  },
+  aiWorkoutsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  aiWorkoutsIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aiWorkoutsInfo: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  aiWorkoutsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  aiWorkoutsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  newBadge: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  aiWorkoutsDescription: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 3,
   },
 });

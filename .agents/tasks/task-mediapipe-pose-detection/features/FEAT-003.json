@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Add Supabase integration to persist workout sessions, sets, and rep data. Only final results (rep counts, set data, duration) are sent to Supabase - no video streaming. Include database schema documentation and a configured Supabase client.",
+  "status": "pending",
+  "steps": [
+    "Add to package.json dependencies: '@supabase/supabase-js': '^2.39.0', 'react-native-url-polyfill': '^2.0.0' (needed for Supabase in React Native).",
+    "Create services/supabase.js - Initialize Supabase client with placeholder URL and anon key (users will replace with their own project credentials). Export the client instance. Include comments documenting the expected environment setup. Use react-native-url-polyfill/auto import at top.",
+    "Create services/workoutService.js - Service layer with functions: (1) saveWorkoutSession({exerciseId, exerciseName, totalDuration, totalReps, sets, startedAt, completedAt}) -> inserts into 'workout_sessions' table and returns the session ID, (2) getWorkoutHistory(limit=20) -> fetches recent workout sessions ordered by date, (3) getExerciseStats(exerciseId) -> fetches aggregate stats for a specific exercise (total reps, sessions count, best set). Each function includes proper error handling and returns {data, error} pattern.",
+    "Create services/database.sql - SQL schema file documenting the Supabase tables to create: (1) workout_sessions table with columns: id (uuid, pk), user_id (uuid, fk to auth.users), exercise_id (text), exercise_name (text), total_duration_seconds (integer), total_reps (integer), sets (jsonb - array of {setNumber, reps, duration}), started_at (timestamptz), completed_at (timestamptz), created_at (timestamptz, default now()). (2) Add RLS policies for user_id = auth.uid().",
+    "Update screens/WorkoutSummaryScreen.js to call saveWorkoutSession when the user taps 'Save Workout'. Show a loading spinner during save, success confirmation with a checkmark animation, and error state with retry option. After successful save, offer to navigate back to home.",
+    "Update screens/HomeScreen.js to show recent workout history: add a 'Recent AI Workouts' section below the Weekly Progress that calls getWorkoutHistory and shows the last 3-5 sessions with exercise name, reps, and date. Handle empty state gracefully with a 'Start your first AI workout' prompt."
+  ],
+  "acceptance_criteria": [
+    "services/supabase.js exports a configured Supabase client (with placeholder credentials clearly marked)",
+    "services/workoutService.js exports saveWorkoutSession, getWorkoutHistory, and getExerciseStats functions",
+    "services/database.sql contains complete table creation SQL with RLS policies",
+    "WorkoutSummaryScreen saves workout data on button press with loading/success/error states",
+    "HomeScreen displays recent AI workout history section",
+    "All .js files pass node --check syntax validation",
+    "No video or image data is included in the Supabase payload - only numeric results"
+  ],
+  "verification": [
+    "Run 'export NODE_OPTIONS=\"\" && node --check services/supabase.js && node --check services/workoutService.js && node --check screens/WorkoutSummaryScreen.js && node --check screens/HomeScreen.js' from /projects/sandbox/snack",
+    "Verify services/database.sql exists and contains CREATE TABLE statements",
+    "Run 'export NODE_OPTIONS=\"\" && node -e \"const ws = require('./services/workoutService'); console.log(typeof ws.saveWorkoutSession === 'function' ? 'PASS' : 'FAIL');\"' from /projects/sandbox/snack"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
