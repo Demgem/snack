@@ -8,19 +8,147 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
-import { usePoseDetection } from 'react-native-mediapipe';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import PoseOverlay from '../components/PoseOverlay';
 import { getDetector, createInitialState } from '../utils/exerciseDetectors';
 import { getExerciseConfig } from '../utils/exerciseConfig';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Minimum interval between rep detection processing (in ms)
-const DETECTION_THROTTLE_MS = 100;
+// Simulated pose landmark generation for demo purposes.
+// Since MediaPipe cannot run on Snack, we simulate realistic landmark
+// movement patterns that drive the exercise detectors and show the UI.
 
-// Minimum interval between overlay landmark updates (in ms) - ~15fps for smooth visualization
-const OVERLAY_THROTTLE_MS = 66;
+/**
+ * Generate a base standing pose with all 33 landmarks.
+ * Coordinates are normalized (0-1) matching MediaPipe format.
+ */
+function generateBasePose() {
+  const landmarks = new Array(33).fill(null);
+
+  // Head
+  landmarks[0] = { x: 0.5, y: 0.15, z: 0, visibility: 0.9 }; // nose
+
+  // Shoulders
+  landmarks[11] = { x: 0.42, y: 0.28, z: 0, visibility: 0.9 }; // left_shoulder
+  landmarks[12] = { x: 0.58, y: 0.28, z: 0, visibility: 0.9 }; // right_shoulder
+
+  // Elbows
+  landmarks[13] = { x: 0.38, y: 0.40, z: 0, visibility: 0.9 }; // left_elbow
+  landmarks[14] = { x: 0.62, y: 0.40, z: 0, visibility: 0.9 }; // right_elbow
+
+  // Wrists
+  landmarks[15] = { x: 0.36, y: 0.52, z: 0, visibility: 0.9 }; // left_wrist
+  landmarks[16] = { x: 0.64, y: 0.52, z: 0, visibility: 0.9 }; // right_wrist
+
+  // Hips
+  landmarks[23] = { x: 0.44, y: 0.52, z: 0, visibility: 0.9 }; // left_hip
+  landmarks[24] = { x: 0.56, y: 0.52, z: 0, visibility: 0.9 }; // right_hip
+
+  // Knees
+  landmarks[25] = { x: 0.44, y: 0.70, z: 0, visibility: 0.9 }; // left_knee
+  landmarks[26] = { x: 0.56, y: 0.70, z: 0, visibility: 0.9 }; // right_knee
+
+  // Ankles
+  landmarks[27] = { x: 0.44, y: 0.88, z: 0, visibility: 0.9 }; // left_ankle
+  landmarks[28] = { x: 0.56, y: 0.88, z: 0, visibility: 0.9 }; // right_ankle
+
+  return landmarks;
+}
+
+/**
+ * Animate landmarks for a squat motion cycle.
+ * Progress goes 0 -> 1 (down) then 1 -> 0 (up).
+ */
+function animateSquat(basePose, progress) {
+  const landmarks = basePose.map(function (lm) {
+    return lm ? { ...lm } : null;
+  });
+
+  // Move hips down and knees bend outward
+  const hipDrop = progress * 0.15;
+  const kneeBend = progress * 0.08;
+
+  if (landmarks[23]) landmarks[23] = { ...landmarks[23], y: 0.52 + hipDrop };
+  if (landmarks[24]) landmarks[24] = { ...landmarks[24], y: 0.52 + hipDrop };
+  if (landmarks[25]) landmarks[25] = { ...landmarks[25], x: 0.40 - kneeBend, y: 0.70 + hipDrop * 0.3 };
+  if (landmarks[26]) landmarks[26] = { ...landmarks[26], x: 0.60 + kneeBend, y: 0.70 + hipDrop * 0.3 };
+
+  return landmarks;
+}
+
+/**
+ * Animate landmarks for a push-up motion cycle.
+ */
+function animatePushUp(basePose, progress) {
+  const landmarks = basePose.map(function (lm) {
+    return lm ? { ...lm } : null;
+  });
+
+  // Arms bend - elbows go out, wrists stay in place, body lowers
+  const elbowBend = progress * 0.10;
+  const bodyDrop = progress * 0.05;
+
+  if (landmarks[13]) landmarks[13] = { ...landmarks[13], x: 0.34, y: 0.40 + elbowBend };
+  if (landmarks[14]) landmarks[14] = { ...landmarks[14], x: 0.66, y: 0.40 + elbowBend };
+  if (landmarks[11]) landmarks[11] = { ...landmarks[11], y: 0.28 + bodyDrop };
+  if (landmarks[12]) landmarks[12] = { ...landmarks[12], y: 0.28 + bodyDrop };
+
+  return landmarks;
+}
+
+/**
+ * Animate landmarks for a bicep curl motion cycle.
+ */
+function animateBicepCurl(basePose, progress) {
+  const landmarks = basePose.map(function (lm) {
+    return lm ? { ...lm } : null;
+  });
+
+  // Wrists curl up towards shoulders
+  const curlAmount = progress * 0.25;
+
+  if (landmarks[15]) landmarks[15] = { ...landmarks[15], y: 0.52 - curlAmount };
+  if (landmarks[16]) landmarks[16] = { ...landmarks[16], y: 0.52 - curlAmount };
+
+  return landmarks;
+}
+
+/**
+ * Animate landmarks for a generic exercise (lunges, deadlifts, etc.)
+ */
+function animateGeneric(basePose, progress) {
+  const landmarks = basePose.map(function (lm) {
+    return lm ? { ...lm } : null;
+  });
+
+  const movement = progress * 0.12;
+
+  if (landmarks[23]) landmarks[23] = { ...landmarks[23], y: 0.52 + movement };
+  if (landmarks[24]) landmarks[24] = { ...landmarks[24], y: 0.52 + movement };
+  if (landmarks[25]) landmarks[25] = { ...landmarks[25], y: 0.70 + movement * 0.5 };
+  if (landmarks[26]) landmarks[26] = { ...landmarks[26], y: 0.70 + movement * 0.5 };
+
+  return landmarks;
+}
+
+/**
+ * Get the animation function for a given exercise.
+ */
+function getAnimator(exerciseId) {
+  switch (exerciseId) {
+    case 'squats':
+    case 'lunges':
+      return animateSquat;
+    case 'push_ups':
+      return animatePushUp;
+    case 'bicep_curls':
+    case 'shoulder_press':
+      return animateBicepCurl;
+    default:
+      return animateGeneric;
+  }
+}
 
 export default function WorkoutSessionScreen({ navigation, route }) {
   const { exercise } = route.params;
@@ -29,44 +157,40 @@ export default function WorkoutSessionScreen({ navigation, route }) {
   const [isActive, setIsActive] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [setsData, setSetsData] = useState([]);
-  const [feedback, setFeedback] = useState('Get ready');
+  const [feedback, setFeedback] = useState('Get ready - Tap Start to begin simulation');
   const [landmarks, setLandmarks] = useState(null);
   const [exerciseState, setExerciseState] = useState(createInitialState());
-  const [cameraPermission, setCameraPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [simulationPhase, setSimulationPhase] = useState(0); // 0-1 progress
+  const [simulationDirection, setSimulationDirection] = useState(1); // 1=down, -1=up
   const timerRef = useRef(null);
+  const simulationRef = useRef(null);
   const exerciseStateRef = useRef(exerciseState);
-  const lastDetectionTimeRef = useRef(0);
-  const lastLandmarkUpdateRef = useRef(0);
-
-  // Camera setup
-  const device = useCameraDevice('front');
 
   // Get exercise config for active landmarks info
   const exerciseConfig = getExerciseConfig(exercise.id);
   const detector = getDetector(exercise.id);
+  const animator = getAnimator(exercise.id);
 
-  // Keep ref in sync with state for use in frame processor callback
-  useEffect(() => {
+  // Keep ref in sync with state for use in simulation
+  useEffect(function () {
     exerciseStateRef.current = exerciseState;
   }, [exerciseState]);
 
   // Request camera permission on mount
-  useEffect(() => {
-    (async () => {
-      const status = await Camera.requestCameraPermission();
-      setCameraPermission(status === 'granted');
-    })();
-  }, []);
+  useEffect(function () {
+    if (!permission) {
+      requestPermission();
+    }
+  }, [permission]);
 
   // Back-navigation guard: confirm before leaving with unsaved data
-  useEffect(() => {
+  useEffect(function () {
     const unsubscribe = navigation.addListener('beforeRemove', function (e) {
-      // Allow navigation if no meaningful data has been recorded
       if (reps === 0 && setsData.length === 0) {
         return;
       }
 
-      // Prevent default behavior of leaving the screen
       e.preventDefault();
 
       Alert.alert(
@@ -88,61 +212,71 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation, reps, setsData]);
 
-  // Pose detection hook
-  const { processFrame } = usePoseDetection({
-    onPoseDetected: useCallback(function (pose) {
-      if (!pose || !pose.landmarks || pose.landmarks.length === 0) {
-        return;
+  // Pose simulation loop - generates animated landmarks and runs them through the detector
+  useEffect(function () {
+    if (!isActive) {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+        simulationRef.current = null;
       }
-      // Throttle overlay updates to ~15fps to avoid excessive re-renders
-      const now = Date.now();
-      if (now - lastLandmarkUpdateRef.current >= OVERLAY_THROTTLE_MS) {
-        lastLandmarkUpdateRef.current = now;
-        setLandmarks(pose.landmarks);
-      }
-    }, []),
-  });
-
-  // Frame processor for camera frames
-  const frameProcessor = useFrameProcessor(function (frame) {
-    'worklet';
-    processFrame(frame);
-  }, [processFrame]);
-
-  // Process landmarks for rep detection (throttled to avoid excessive re-renders)
-  useEffect(() => {
-    if (!landmarks || !isActive || !detector) {
       return;
     }
 
-    const now = Date.now();
-    if (now - lastDetectionTimeRef.current < DETECTION_THROTTLE_MS) {
-      return;
-    }
-    lastDetectionTimeRef.current = now;
+    const basePose = generateBasePose();
+    let phase = 0;
+    let direction = 1;
+    const speed = 0.04; // Controls how fast the simulation cycles
 
-    const result = detector(landmarks, exerciseStateRef.current);
+    simulationRef.current = setInterval(function () {
+      phase += speed * direction;
 
-    if (result.feedback) {
-      setFeedback(result.feedback);
-    }
+      // Reverse direction at extremes
+      if (phase >= 1) {
+        phase = 1;
+        direction = -1;
+      } else if (phase <= 0) {
+        phase = 0;
+        direction = 1;
+      }
 
-    setExerciseState(result.newState);
+      // Generate animated landmarks
+      const animatedLandmarks = animator(basePose, phase);
+      setLandmarks(animatedLandmarks);
 
-    if (result.repCompleted) {
-      setReps(function (prev) { return prev + 1; });
-    }
-  }, [landmarks, isActive, detector]);
+      // Run through the exercise detector
+      if (detector) {
+        const result = detector(animatedLandmarks, exerciseStateRef.current);
 
-  useEffect(() => {
-    return () => {
+        if (result.feedback) {
+          setFeedback(result.feedback);
+        }
+
+        setExerciseState(result.newState);
+
+        if (result.repCompleted) {
+          setReps(function (prev) { return prev + 1; });
+        }
+      }
+    }, 100);
+
+    return function () {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+        simulationRef.current = null;
+      }
+    };
+  }, [isActive, detector, animator]);
+
+  // Timer
+  useEffect(function () {
+    return function () {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
   }, []);
 
-  const formatTime = (seconds) => {
+  const formatTime = function (seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return (
@@ -150,15 +284,15 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     );
   };
 
-  const handleStart = () => {
+  const handleStart = function () {
     setIsActive(true);
     setExerciseState(createInitialState());
-    timerRef.current = setInterval(() => {
-      setElapsedTime((prev) => prev + 1);
+    timerRef.current = setInterval(function () {
+      setElapsedTime(function (prev) { return prev + 1; });
     }, 1000);
   };
 
-  const handlePause = () => {
+  const handlePause = function () {
     setIsActive(false);
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -166,7 +300,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     }
   };
 
-  const handleFinishSet = () => {
+  const handleFinishSet = function () {
     handlePause();
     const setData = {
       setNumber: sets,
@@ -182,7 +316,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     setFeedback('Ready for next set');
   };
 
-  const handleFinishWorkout = () => {
+  const handleFinishWorkout = function () {
     handlePause();
     const finalSetsData =
       reps > 0
@@ -192,43 +326,32 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     navigation.navigate('WorkoutSummary', {
       exercise,
       setsData: finalSetsData,
-      totalDuration: finalSetsData.reduce((sum, s) => sum + s.duration, 0),
+      totalDuration: finalSetsData.reduce(function (sum, s) { return sum + s.duration; }, 0),
     });
   };
 
-  const renderCamera = () => {
-    if (cameraPermission === false) {
+  const renderCamera = function () {
+    if (!permission || !permission.granted) {
       return (
         <View style={styles.cameraPlaceholder}>
           <Ionicons name="camera-outline" size={64} color="rgba(255,255,255,0.5)" />
           <Text style={styles.cameraPlaceholderText}>
-            Camera permission denied
+            Camera permission required
           </Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
           <Text style={styles.cameraSubText}>
-            Enable camera access in settings
-          </Text>
-        </View>
-      );
-    }
-
-    if (!device) {
-      return (
-        <View style={styles.cameraPlaceholder}>
-          <Ionicons name="camera" size={64} color="rgba(255,255,255,0.5)" />
-          <Text style={styles.cameraPlaceholderText}>
-            Loading Camera...
+            Pose detection is simulated for demo purposes
           </Text>
         </View>
       );
     }
 
     return (
-      <Camera
+      <CameraView
         style={StyleSheet.absoluteFill}
-        device={device}
-        isActive={isActive}
-        frameProcessor={frameProcessor}
-        pixelFormat="yuv"
+        facing="front"
       />
     );
   };
@@ -255,6 +378,12 @@ export default function WorkoutSessionScreen({ navigation, route }) {
             isCorrectForm={isCorrectForm}
           />
         )}
+
+        {/* Simulation indicator */}
+        <View style={styles.simBadge}>
+          <Ionicons name="analytics-outline" size={12} color="#fff" />
+          <Text style={styles.simBadgeText}>Simulated Pose Detection</Text>
+        </View>
 
         {/* Exercise Info Overlay - Top */}
         <View style={styles.topOverlay}>
@@ -328,13 +457,15 @@ export default function WorkoutSessionScreen({ navigation, route }) {
           {/* Sets Summary */}
           {setsData.length > 0 && (
             <View style={styles.setsHistory}>
-              {setsData.map((setItem, index) => (
-                <View key={index} style={styles.setHistoryItem}>
-                  <Text style={styles.setHistoryText}>
-                    Set {setItem.setNumber}: {setItem.reps} reps
-                  </Text>
-                </View>
-              ))}
+              {setsData.map(function (setItem, index) {
+                return (
+                  <View key={index} style={styles.setHistoryItem}>
+                    <Text style={styles.setHistoryText}>
+                      Set {setItem.setNumber}: {setItem.reps} reps
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -366,14 +497,44 @@ const styles = StyleSheet.create({
   cameraSubText: {
     color: 'rgba(255,255,255,0.3)',
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 8,
+  },
+  permissionButton: {
+    marginTop: 16,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  simBadge: {
+    position: 'absolute',
+    top: 40,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(156, 39, 176, 0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 10,
+  },
+  simBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   topOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 50,
+    paddingTop: 60,
     paddingHorizontal: 20,
   },
   exerciseInfoBar: {

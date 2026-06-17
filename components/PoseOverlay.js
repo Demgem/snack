@@ -92,7 +92,7 @@ export default function PoseOverlay({ landmarks, width, height, activeLandmarks,
   const renderLandmarks = function () {
     return VISIBLE_LANDMARKS.map(function (index) {
       const landmark = landmarks[index];
-      if (!landmark || landmark.visibility < 0.5) {
+      if (!landmark || (landmark.visibility !== undefined && landmark.visibility < 0.5)) {
         return null;
       }
 
@@ -129,7 +129,7 @@ export default function PoseOverlay({ landmarks, width, height, activeLandmarks,
       const start = landmarks[startIdx];
       const end = landmarks[endIdx];
 
-      if (!start || !end || start.visibility < 0.5 || end.visibility < 0.5) {
+      if (!start || !end || (start.visibility !== undefined && start.visibility < 0.5) || (end.visibility !== undefined && end.visibility < 0.5)) {
         return null;
       }
 
