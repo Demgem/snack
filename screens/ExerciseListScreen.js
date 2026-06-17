@@ -7,73 +7,31 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getAllExercises } from '../utils/exerciseConfig';
 
-const exercises = [
-  {
-    id: '1',
-    name: 'Squats',
-    targetMuscles: 'Quads, Glutes, Hamstrings',
-    difficulty: 'Beginner',
-    icon: 'body-outline',
-    description: 'Lower body compound movement tracking knee and hip angles.',
-  },
-  {
-    id: '2',
-    name: 'Push-Ups',
-    targetMuscles: 'Chest, Triceps, Shoulders',
-    difficulty: 'Beginner',
-    icon: 'fitness-outline',
-    description: 'Upper body push movement tracking elbow and shoulder angles.',
-  },
-  {
-    id: '3',
-    name: 'Lunges',
-    targetMuscles: 'Quads, Glutes, Hamstrings',
-    difficulty: 'Beginner',
-    icon: 'walk-outline',
-    description: 'Single-leg movement tracking knee flexion and hip alignment.',
-  },
-  {
-    id: '4',
-    name: 'Bicep Curls',
-    targetMuscles: 'Biceps, Forearms',
-    difficulty: 'Beginner',
-    icon: 'barbell-outline',
-    description: 'Isolation movement tracking elbow angle through curl motion.',
-  },
-  {
-    id: '5',
-    name: 'Plank Hold',
-    targetMuscles: 'Core, Shoulders, Back',
-    difficulty: 'Intermediate',
-    icon: 'timer-outline',
-    description: 'Isometric hold tracking body alignment and form stability.',
-  },
-  {
-    id: '6',
-    name: 'Shoulder Press',
-    targetMuscles: 'Shoulders, Triceps, Upper Back',
-    difficulty: 'Intermediate',
-    icon: 'arrow-up-outline',
-    description: 'Overhead press tracking shoulder and elbow extension.',
-  },
-  {
-    id: '7',
-    name: 'Jumping Jacks',
-    targetMuscles: 'Full Body, Cardio',
-    difficulty: 'Beginner',
-    icon: 'flash-outline',
-    description: 'Full body cardio tracking arm and leg spread positions.',
-  },
-  {
-    id: '8',
-    name: 'Deadlifts',
-    targetMuscles: 'Back, Glutes, Hamstrings',
-    difficulty: 'Advanced',
-    icon: 'trending-up-outline',
-    description: 'Hip hinge movement tracking spine angle and hip extension.',
-  },
-];
+// Icon mapping for each exercise slug
+const EXERCISE_ICONS = {
+  squats: 'body-outline',
+  push_ups: 'fitness-outline',
+  lunges: 'walk-outline',
+  bicep_curls: 'barbell-outline',
+  plank_hold: 'timer-outline',
+  shoulder_press: 'arrow-up-outline',
+  jumping_jacks: 'flash-outline',
+  deadlifts: 'trending-up-outline',
+};
+
+// Use the canonical exercise configs as the data source
+const exercises = getAllExercises().map(function (config) {
+  return {
+    id: config.id,
+    name: config.name,
+    targetMuscles: config.targetMuscles.join(', '),
+    difficulty: config.difficulty,
+    icon: EXERCISE_ICONS[config.id] || 'fitness-outline',
+    description: config.description,
+  };
+});
 
 function getDifficultyColor(difficulty) {
   switch (difficulty) {

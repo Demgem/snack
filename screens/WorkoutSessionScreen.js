@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
@@ -17,6 +18,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Minimum interval between rep detection processing (in ms)
 const DETECTION_THROTTLE_MS = 100;
+
+// Minimum interval between overlay landmark updates (in ms) - ~15fps for smooth visualization
+const OVERLAY_THROTTLE_MS = 66;
 
 export default function WorkoutSessionScreen({ navigation, route }) {
   const { exercise } = route.params;
@@ -32,6 +36,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
   const timerRef = useRef(null);
   const exerciseStateRef = useRef(exerciseState);
   const lastDetectionTimeRef = useRef(0);
+  const lastLandmarkUpdateRef = useRef(0);
 
   // Camera setup
   const device = useCameraDevice('front');
@@ -53,13 +58,48 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     })();
   }, []);
 
+  // Back-navigation guard: confirm before leaving with unsaved data
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', function (e) {
+      // Allow navigation if no meaningful data has been recorded
+      if (reps === 0 && setsData.length === 0) {
+        return;
+      }
+
+      // Prevent default behavior of leaving the screen
+      e.preventDefault();
+
+      Alert.alert(
+        'Discard Workout?',
+        'You have unsaved workout data. Are you sure you want to leave? Your progress will be lost.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: function () {
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation, reps, setsData]);
+
   // Pose detection hook
   const { processFrame } = usePoseDetection({
     onPoseDetected: useCallback(function (pose) {
       if (!pose || !pose.landmarks || pose.landmarks.length === 0) {
         return;
       }
-      setLandmarks(pose.landmarks);
+      // Throttle overlay updates to ~15fps to avoid excessive re-renders
+      const now = Date.now();
+      if (now - lastLandmarkUpdateRef.current >= OVERLAY_THROTTLE_MS) {
+        lastLandmarkUpdateRef.current = now;
+        setLandmarks(pose.landmarks);
+      }
     }, []),
   });
 

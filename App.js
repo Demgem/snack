@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import supabase from './services/supabase';
+import AuthScreen from './screens/AuthScreen';
 import HomeScreen from './screens/HomeScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import ExerciseListScreen from './screens/ExerciseListScreen';
@@ -51,6 +53,36 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check for existing session
+    supabase.auth.getSession().then(function ({ data: { session: currentSession } }) {
+      setSession(currentSession);
+      setIsLoading(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      function (_event, currentSession) {
+        setSession(currentSession);
+      }
+    );
+
+    return function () {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator
