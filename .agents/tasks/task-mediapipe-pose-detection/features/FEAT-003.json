@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Add Supabase integration to persist workout sessions, sets, and rep data. Only final results (rep counts, set data, duration) are sent to Supabase - no video streaming. Include database schema documentation and a configured Supabase client.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Add to package.json dependencies: '@supabase/supabase-js': '^2.39.0', 'react-native-url-polyfill': '^2.0.0' (needed for Supabase in React Native).",
     "Create services/supabase.js - Initialize Supabase client with placeholder URL and anon key (users will replace with their own project credentials). Export the client instance. Include comments documenting the expected environment setup. Use react-native-url-polyfill/auto import at top.",

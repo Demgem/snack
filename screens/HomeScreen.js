@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getWorkoutHistory } from '../services/workoutService';
 
 const statsData = [
   { id: '1', icon: 'footsteps-outline', label: 'Steps', value: '8,432', goal: '10,000' },
@@ -22,6 +24,121 @@ const workouts = [
 ];
 
 export default function HomeScreen({ navigation }) {
+  const [recentWorkouts, setRecentWorkouts] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [historyError, setHistoryError] = useState(false);
+
+  const fetchRecentWorkouts = useCallback(async () => {
+    setLoadingHistory(true);
+    setHistoryError(false);
+    const { data, error } = await getWorkoutHistory(5);
+    if (error) {
+      setHistoryError(true);
+    } else {
+      setRecentWorkouts(data || []);
+    }
+    setLoadingHistory(false);
+  }, []);
+
+  useEffect(() => {
+    fetchRecentWorkouts();
+  }, [fetchRecentWorkouts]);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return diffDays + ' days ago';
+    return date.toLocaleDateString();
+  };
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins + ':' + String(secs).padStart(2, '0');
+  };
+
+  const renderRecentAIWorkouts = () => {
+    if (loadingHistory) {
+      return (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Recent AI Workouts</Text>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#4CAF50" />
+            <Text style={styles.loadingText}>Loading workouts...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (historyError) {
+      return (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Recent AI Workouts</Text>
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="cloud-offline-outline" size={32} color="#999" />
+            <Text style={styles.emptyStateText}>Unable to load workout history</Text>
+            <TouchableOpacity style={styles.retryLink} onPress={fetchRecentWorkouts}>
+              <Text style={styles.retryLinkText}>Tap to retry</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    if (recentWorkouts.length === 0) {
+      return (
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Recent AI Workouts</Text>
+          <TouchableOpacity
+            style={styles.emptyStateContainer}
+            onPress={() => navigation.navigate('ExerciseList')}
+          >
+            <Ionicons name="fitness-outline" size={40} color="#4CAF50" />
+            <Text style={styles.emptyStateTitle}>Start your first AI workout</Text>
+            <Text style={styles.emptyStateText}>
+              Use camera-based pose tracking to count reps automatically
+            </Text>
+            <View style={styles.startButton}>
+              <Text style={styles.startButtonText}>Get Started</Text>
+              <Ionicons name="arrow-forward" size={16} color="#4CAF50" />
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.sectionContainer}>
+        <Text style={styles.sectionTitle}>Recent AI Workouts</Text>
+        {recentWorkouts.map((session, index) => (
+          <View key={session.id || index} style={styles.recentWorkoutCard}>
+            <View style={styles.recentWorkoutIcon}>
+              <Ionicons name="barbell-outline" size={22} color="#fff" />
+            </View>
+            <View style={styles.recentWorkoutInfo}>
+              <Text style={styles.recentWorkoutName}>
+                {session.exercise_name || 'Workout'}
+              </Text>
+              <Text style={styles.recentWorkoutDetails}>
+                {session.total_reps || 0} reps | {formatDuration(session.total_duration_seconds)}
+              </Text>
+            </View>
+            <Text style={styles.recentWorkoutDate}>
+              {formatDate(session.completed_at)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <ScrollView style={styles.container}>
       {/* Greeting Section */}
@@ -121,6 +238,9 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
       </View>
+
+      {/* Recent AI Workouts */}
+      {renderRecentAIWorkouts()}
     </ScrollView>
   );
 }
@@ -314,5 +434,100 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 3,
+  },
+  // Recent AI Workouts styles
+  recentWorkoutCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  recentWorkoutIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recentWorkoutInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  recentWorkoutName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  recentWorkoutDetails: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  recentWorkoutDate: {
+    fontSize: 11,
+    color: '#999',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 10,
+  },
+  emptyStateContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 12,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  startButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginRight: 4,
+  },
+  retryLink: {
+    marginTop: 10,
+  },
+  retryLinkText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
 });

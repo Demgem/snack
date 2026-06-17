@@ -1,18 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { saveWorkoutSession } from '../services/workoutService';
 
 export default function WorkoutSummaryScreen({ navigation, route }) {
   const { exercise, setsData, totalDuration } = route.params;
 
   const totalReps = setsData.reduce((sum, set) => sum + set.reps, 0);
   const totalSets = setsData.length;
+
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | success | error
+  const [errorMessage, setErrorMessage] = useState('');
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -22,13 +27,105 @@ export default function WorkoutSummaryScreen({ navigation, route }) {
     );
   };
 
-  const handleSaveWorkout = () => {
-    // Will integrate with Supabase in a later feature
+  const handleSaveWorkout = async () => {
+    setSaveStatus('saving');
+    setErrorMessage('');
+
+    const now = new Date().toISOString();
+    const startedAt =
+      route.params.startedAt || new Date(Date.now() - totalDuration * 1000).toISOString();
+
+    const { data, error } = await saveWorkoutSession({
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      totalDuration: totalDuration,
+      totalReps: totalReps,
+      sets: setsData.map((s) => ({
+        setNumber: s.setNumber,
+        reps: s.reps,
+        duration: s.duration,
+      })),
+      startedAt: startedAt,
+      completedAt: now,
+    });
+
+    if (error) {
+      setSaveStatus('error');
+      setErrorMessage(error.message || 'Failed to save workout. Please try again.');
+    } else {
+      setSaveStatus('success');
+    }
+  };
+
+  const handleGoHome = () => {
     navigation.popToTop();
   };
 
   const handleDiscardWorkout = () => {
     navigation.popToTop();
+  };
+
+  const handleRetry = () => {
+    handleSaveWorkout();
+  };
+
+  const renderActionButtons = () => {
+    if (saveStatus === 'saving') {
+      return (
+        <View style={styles.actionsContainer}>
+          <View style={styles.savingButton}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.saveButtonText}>Saving Workout...</Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (saveStatus === 'success') {
+      return (
+        <View style={styles.actionsContainer}>
+          <View style={styles.successButton}>
+            <Ionicons name="checkmark-circle" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>Workout Saved!</Text>
+          </View>
+          <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
+            <Ionicons name="home-outline" size={20} color="#4CAF50" />
+            <Text style={styles.homeButtonText}>Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (saveStatus === 'error') {
+      return (
+        <View style={styles.actionsContainer}>
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={20} color="#F44336" />
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+            <Ionicons name="refresh-outline" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.discardButton} onPress={handleDiscardWorkout}>
+            <Text style={styles.discardButtonText}>Discard & Go Home</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // idle state
+    return (
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSaveWorkout}>
+          <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
+          <Text style={styles.saveButtonText}>Save Workout</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.discardButton} onPress={handleDiscardWorkout}>
+          <Text style={styles.discardButtonText}>Discard</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
@@ -90,22 +187,7 @@ export default function WorkoutSummaryScreen({ navigation, route }) {
       </View>
 
       {/* Action Buttons */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSaveWorkout}
-        >
-          <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
-          <Text style={styles.saveButtonText}>Save Workout</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.discardButton}
-          onPress={handleDiscardWorkout}
-        >
-          <Text style={styles.discardButtonText}>Discard</Text>
-        </TouchableOpacity>
-      </View>
+      {renderActionButtons()}
     </ScrollView>
   );
 }
@@ -257,11 +339,65 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  savingButton: {
+    backgroundColor: '#81C784',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF9800',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   saveButtonText: {
     color: '#fff',
     fontSize: 17,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  homeButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 14,
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+    borderRadius: 12,
+  },
+  homeButtonText: {
+    color: '#4CAF50',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  errorText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
   },
   discardButton: {
     padding: 14,
