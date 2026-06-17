@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import supabase from './services/supabase';
 import AuthScreen from './screens/AuthScreen';
@@ -12,7 +12,7 @@ import WorkoutSessionScreen from './screens/WorkoutSessionScreen';
 import WorkoutSummaryScreen from './screens/WorkoutSummaryScreen';
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 
 function MainTabs() {
   return (
@@ -122,7 +122,7 @@ export default function App() {
           component={WorkoutSummaryScreen}
           options={{
             title: 'Summary',
-            headerBackVisible: false,
+            headerLeft: () => null,
           }}
         />
       </Stack.Navigator>
