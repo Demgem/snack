@@ -3,7 +3,7 @@
  * Defines metadata, thresholds, and detection parameters for each exercise.
  */
 
-const EXERCISE_CONFIG = {
+export const EXERCISE_CONFIG = {
   squats: {
     id: 'squats',
     name: 'Squats',
@@ -139,7 +139,7 @@ const EXERCISE_CONFIG = {
  * @param {string} exerciseId - The exercise identifier
  * @returns {Object|null} Exercise configuration or null
  */
-function getExerciseConfig(exerciseId) {
+export function getExerciseConfig(exerciseId) {
   return EXERCISE_CONFIG[exerciseId] || null;
 }
 
@@ -147,12 +147,6 @@ function getExerciseConfig(exerciseId) {
  * Get all exercise configurations as an array.
  * @returns {Array} Array of exercise config objects
  */
-function getAllExercises() {
+export function getAllExercises() {
   return Object.values(EXERCISE_CONFIG);
 }
-
-module.exports = {
-  EXERCISE_CONFIG,
-  getExerciseConfig,
-  getAllExercises,
-};

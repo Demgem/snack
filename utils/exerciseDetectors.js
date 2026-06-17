@@ -4,7 +4,7 @@
  * Detectors receive landmark data and previous state, returning rep completion status.
  */
 
-const { calculateAngle, calculateDistance, getLandmark } = require('./poseDetection');
+import { calculateAngle, calculateDistance, getLandmark } from './poseDetection';
 
 // Phase constants
 const PHASE_UP = 'up';
@@ -19,6 +19,7 @@ function createInitialState() {
     phase: PHASE_NEUTRAL,
     holdStartTime: null,
     holdSeconds: 0,
+    lastAlignedTime: null,
   };
 }
 
@@ -222,10 +223,13 @@ function detectBicepCurls(landmarks, previousState) {
 /**
  * Plank hold detector - tracks body alignment (shoulder-hip-ankle angle near 180).
  * Counts seconds held rather than reps.
+ * Includes a 500ms grace period so brief landmark dropout does not reset the timer.
  */
 function detectPlankHold(landmarks, previousState) {
   const state = previousState || createInitialState();
   const now = Date.now();
+
+  const GRACE_PERIOD_MS = 500;
 
   const leftShoulder = getLandmark(landmarks, 'left_shoulder');
   const leftHip = getLandmark(landmarks, 'left_hip');
@@ -235,7 +239,19 @@ function detectPlankHold(landmarks, previousState) {
   const rightAnkle = getLandmark(landmarks, 'right_ankle');
 
   if (!leftShoulder || !leftHip || !leftAnkle || !rightShoulder || !rightHip || !rightAnkle) {
-    return { repCompleted: false, newState: state, feedback: 'Position your full body in frame' };
+    // Grace period: if we had an active hold, don't reset immediately
+    if (state.holdStartTime && state.lastAlignedTime) {
+      const elapsed = now - state.lastAlignedTime;
+      if (elapsed < GRACE_PERIOD_MS) {
+        // Within grace period, maintain state but don't count additional time
+        return {
+          repCompleted: false,
+          newState: state,
+          feedback: 'Hold steady - tracking...',
+        };
+      }
+    }
+    return { repCompleted: false, newState: { ...state, holdStartTime: null, lastAlignedTime: null }, feedback: 'Position your full body in frame' };
   }
 
   const leftAngle = calculateAngle(leftShoulder, leftHip, leftAnkle);
@@ -246,10 +262,12 @@ function detectPlankHold(landmarks, previousState) {
 
   let holdStartTime = state.holdStartTime;
   let holdSeconds = state.holdSeconds;
+  let lastAlignedTime = state.lastAlignedTime;
   let repCompleted = false;
   let feedback = '';
 
   if (isAligned) {
+    lastAlignedTime = now;
     if (!holdStartTime) {
       holdStartTime = now;
     }
@@ -260,17 +278,31 @@ function detectPlankHold(landmarks, previousState) {
       repCompleted = true;
     }
   } else {
+    // Check grace period before resetting
+    if (holdStartTime && lastAlignedTime) {
+      const elapsed = now - lastAlignedTime;
+      if (elapsed < GRACE_PERIOD_MS) {
+        // Within grace period, maintain hold state
+        feedback = 'Adjust form - hold steady';
+        return {
+          repCompleted: false,
+          newState: { ...state, holdStartTime, holdSeconds, lastAlignedTime },
+          feedback,
+        };
+      }
+    }
     if (holdStartTime) {
       feedback = 'Form lost - straighten your body';
     } else {
       feedback = 'Get into plank position';
     }
     holdStartTime = null;
+    lastAlignedTime = null;
   }
 
   return {
     repCompleted,
-    newState: { ...state, holdStartTime, holdSeconds },
+    newState: { ...state, holdStartTime, holdSeconds, lastAlignedTime },
     feedback,
   };
 }
@@ -439,7 +471,7 @@ function detectDeadlifts(landmarks, previousState) {
 /**
  * Map of exercise IDs to their detector functions.
  */
-const EXERCISE_DETECTORS = {
+export const EXERCISE_DETECTORS = {
   squats: detectSquats,
   push_ups: detectPushUps,
   lunges: detectLunges,
@@ -455,13 +487,11 @@ const EXERCISE_DETECTORS = {
  * @param {string} exerciseId - The exercise identifier
  * @returns {Function|null} The detector function or null
  */
-function getDetector(exerciseId) {
+export function getDetector(exerciseId) {
   return EXERCISE_DETECTORS[exerciseId] || null;
 }
 
-module.exports = {
-  EXERCISE_DETECTORS,
-  getDetector,
+export {
   createInitialState,
   detectSquats,
   detectPushUps,

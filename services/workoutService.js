@@ -29,9 +29,17 @@ export async function saveWorkoutSession({
   completedAt,
 }) {
   try {
+    // Get the current authenticated user for RLS compliance
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !userData?.user) {
+      return { data: null, error: { message: 'User not authenticated. Please sign in to save workouts.' } };
+    }
+
     const { data, error } = await supabase
       .from('workout_sessions')
       .insert({
+        user_id: userData.user.id,
         exercise_id: exerciseId,
         exercise_name: exerciseName,
         total_duration_seconds: totalDuration,

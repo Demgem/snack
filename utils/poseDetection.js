@@ -5,7 +5,7 @@
  */
 
 // MediaPipe Pose landmark indices mapped to body part names
-const POSE_LANDMARKS = {
+export const POSE_LANDMARKS = {
   nose: 0,
   left_eye_inner: 1,
   left_eye: 2,
@@ -50,7 +50,7 @@ const POSE_LANDMARKS = {
  * @param {Object} pointC - {x, y} coordinate of point C
  * @returns {number} Angle in degrees at point B (0-180)
  */
-function calculateAngle(pointA, pointB, pointC) {
+export function calculateAngle(pointA, pointB, pointC) {
   const radians =
     Math.atan2(pointC.y - pointB.y, pointC.x - pointB.x) -
     Math.atan2(pointA.y - pointB.y, pointA.x - pointB.x);
@@ -71,7 +71,7 @@ function calculateAngle(pointA, pointB, pointC) {
  * @param {Object} pointB - {x, y} coordinate of point B
  * @returns {number} Distance between the two points
  */
-function calculateDistance(pointA, pointB) {
+export function calculateDistance(pointA, pointB) {
   const dx = pointB.x - pointA.x;
   const dy = pointB.y - pointA.y;
   return Math.sqrt(dx * dx + dy * dy);
@@ -84,17 +84,10 @@ function calculateDistance(pointA, pointB) {
  * @param {string} name - Name of the landmark from POSE_LANDMARKS
  * @returns {Object|null} The landmark {x, y, z} or null if not found
  */
-function getLandmark(landmarks, name) {
+export function getLandmark(landmarks, name) {
   const index = POSE_LANDMARKS[name];
   if (index === undefined || !landmarks || !landmarks[index]) {
     return null;
   }
   return landmarks[index];
 }
-
-module.exports = {
-  POSE_LANDMARKS,
-  calculateAngle,
-  calculateDistance,
-  getLandmark,
-};

@@ -15,6 +15,9 @@ import { getExerciseConfig } from '../utils/exerciseConfig';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+// Minimum interval between rep detection processing (in ms)
+const DETECTION_THROTTLE_MS = 100;
+
 export default function WorkoutSessionScreen({ navigation, route }) {
   const { exercise } = route.params;
   const [reps, setReps] = useState(0);
@@ -28,6 +31,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
   const [cameraPermission, setCameraPermission] = useState(null);
   const timerRef = useRef(null);
   const exerciseStateRef = useRef(exerciseState);
+  const lastDetectionTimeRef = useRef(0);
 
   // Camera setup
   const device = useCameraDevice('front');
@@ -65,11 +69,17 @@ export default function WorkoutSessionScreen({ navigation, route }) {
     processFrame(frame);
   }, [processFrame]);
 
-  // Process landmarks for rep detection
+  // Process landmarks for rep detection (throttled to avoid excessive re-renders)
   useEffect(() => {
     if (!landmarks || !isActive || !detector) {
       return;
     }
+
+    const now = Date.now();
+    if (now - lastDetectionTimeRef.current < DETECTION_THROTTLE_MS) {
+      return;
+    }
+    lastDetectionTimeRef.current = now;
 
     const result = detector(landmarks, exerciseStateRef.current);
 
@@ -176,7 +186,7 @@ export default function WorkoutSessionScreen({ navigation, route }) {
       <Camera
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={true}
+        isActive={isActive}
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
       />
